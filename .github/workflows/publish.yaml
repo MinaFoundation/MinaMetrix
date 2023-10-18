@@ -1,0 +1,47 @@
+---
+    name: Build and Publish MinaMetrix
+
+    on:
+      workflow_dispatch:
+
+    env:
+      ECR_REPOSITORY_URL: 673156464838.dkr.ecr.us-west-2.amazonaws.com
+      ECR_REPOSITORY_NAME: minametrix
+
+    # This allows a subsequently queued workflow run to interrupt previous runs
+    concurrency:
+      group: '${{ github.workflow }} @ ${{ github.head_ref || github.ref }}'
+      cancel-in-progress: true
+
+    jobs:
+      build-docker-image:
+          name: Build and Push Docker Image
+          runs-on: minafoundation-default-runners
+          steps:
+            - name: 📥 Checkout
+              uses: actions/checkout@v3
+            - name: 🦀 Get MinaMetrix version from package.json
+              id: get-version
+              uses: martinbeentjes/npm-get-version-action@v1.3.1
+            - name: 🏷️ Generate Tag
+              run: echo "TAG=${{ steps.get-version.outputs.current-version }}-$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_ENV
+            - name: 🔑 ECR Login
+              id: login-ecr
+              uses: aws-actions/amazon-ecr-login@v1
+            - name: 🔍 Check if Tag already exists
+              id: checktag
+              uses: tyriis/docker-image-tag-exists@main
+              with:
+                registry: ${{ env.ECR_REPOSITORY_URL}}
+                repository: ${{ env.ECR_REPOSITORY_NAME }}
+                tag: ${{ env.TAG }}
+            - name: 🛠️ Build MinaMetrix Docker Image
+              if: steps.checktag.outputs.tag == 'not found'
+              run: DOCKER_BUILDKIT=1 docker build -t ${{ env.ECR_REPOSITORY_URL}}/${{ env.ECR_REPOSITORY_NAME }}:${{ env.TAG }} .
+            - name: 🚚 Push MinaMetrix Docker Image
+              if: steps.checktag.outputs.tag == 'not found'
+              run: docker push ${{ env.ECR_REPOSITORY_URL}}/${{ env.ECR_REPOSITORY_NAME }}:${{ env.TAG }}
+            - name: 📝 Release Notes
+              run: |
+                echo "Generate Release Notes"
+                echo "TODO: Generate Release Notes (https://github.com/MinaProtocol/mf-devops-workflows/issues/23)"
